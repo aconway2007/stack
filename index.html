@@ -402,10 +402,11 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
 
     <div class="card">
-      <div class="card-title">Voice · Claude API Key</div>
-      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px">Required for voice nutrition lookup. Your key is stored only on this device and never sent anywhere except Anthropic's API.</p>
+      <div class="card-title">Voice · API Key</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:4px">For iPhone use, get a free <strong style="color:var(--text)">OpenRouter</strong> key at <strong style="color:var(--blue)">openrouter.ai</strong> (starts with <code style="color:var(--blue)">sk-or-</code>). OpenRouter works on all devices. Free credits included.</p>
+      <p style="font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:12px">Anthropic keys (<code style="color:var(--muted)">sk-ant-…</code>) are blocked on iOS Safari due to CORS.</p>
       <div class="form-row">
-        <input type="password" id="s-api" placeholder="sk-ant-api03-…" autocomplete="off" autocorrect="off" spellcheck="false" style="font-size:14px">
+        <input type="password" id="s-api" placeholder="sk-or-… or sk-ant-…" autocomplete="off" autocorrect="off" spellcheck="false" style="font-size:14px">
       </div>
       <div class="api-key-status" id="api-key-status"></div>
       <div style="display:flex;gap:8px;margin-top:4px">
@@ -1170,11 +1171,14 @@ const _storeAPIKey = (k) => localStorage.setItem('stk_api_key', k);
 function saveAPIKey() {
   const val = document.getElementById('s-api').value.trim();
   if (!val) { toast('Paste your API key first'); return; }
-  if (!val.startsWith('sk-ant-')) { toast('Key should start with sk-ant-…'); return; }
+  if (!val.startsWith('sk-or-') && !val.startsWith('sk-ant-')) {
+    toast('Key must start with sk-or-… (OpenRouter) or sk-ant-… (Anthropic)');
+    return;
+  }
   _storeAPIKey(val);
   document.getElementById('s-api').value = '';
   renderAPIKeyStatus();
-  toast('API key saved');
+  toast(val.startsWith('sk-or-') ? 'OpenRouter key saved ✓' : 'Anthropic key saved ✓');
 }
 
 function clearAPIKey() {
@@ -1245,29 +1249,47 @@ function startVoice() {
 
 async function parseNutrition(transcript) {
   const key = getAPIKey().trim();
+  const prompt = `You are a nutrition expert. Estimate nutrition for the food described. Return ONLY a JSON object — no explanation, no markdown — with exactly these keys: "name" (short food name string), "calories" (integer), "protein" (integer grams). Use typical US restaurant or home-cooked portions. If multiple items, give combined totals.\n\nFood: "${transcript}"`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
+  const useOpenRouter = key.startsWith('sk-or-');
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'omit',
-      signal: controller.signal,
-      headers: {
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerous-allow-browser': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 256,
-        messages: [{
-          role: 'user',
-          content: `You are a nutrition expert. Estimate nutrition for the food described. Return ONLY a JSON object — no explanation, no markdown — with exactly these keys: "name" (short food name string), "calories" (integer), "protein" (integer grams). Use typical US restaurant or home-cooked portions. If multiple items, give combined totals.\n\nFood: "${transcript}"`
-        }]
-      })
-    });
+    let res;
+    if (useOpenRouter) {
+      res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://aconway2007.github.io/stack/',
+          'X-Title': 'Stack Nutrition Tracker',
+        },
+        body: JSON.stringify({
+          model: 'anthropic/claude-haiku-4-5',
+          max_tokens: 256,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+    } else {
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+        signal: controller.signal,
+        headers: {
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-allow-browser': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 256,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+    }
     clearTimeout(timeout);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -1277,7 +1299,7 @@ async function parseNutrition(transcript) {
       throw new Error(msg || `API error ${res.status}`);
     }
     const data = await res.json();
-    const raw  = data.content[0].text;
+    const raw = useOpenRouter ? data.choices[0].message.content : data.content[0].text;
     const match = raw.match(/\{[\s\S]*?\}/);
     if (!match) throw new Error('Unexpected response — try again');
     const parsed = JSON.parse(match[0]);
@@ -1289,9 +1311,9 @@ async function parseNutrition(transcript) {
     if (e.name === 'AbortError') {
       toast('Request timed out — try again');
     } else if (e.message === 'Load failed' || e.message === 'Failed to fetch' || e.message === 'NetworkError when attempting to fetch resource.') {
-      toast('Network blocked — re-enter your API key in Settings');
+      toast('Network blocked — switch to an OpenRouter key (sk-or-…) in Settings');
     } else {
-      toast(e.message || 'Could not reach Claude');
+      toast(e.message || 'Could not reach API');
     }
   }
 }
