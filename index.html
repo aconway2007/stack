@@ -796,6 +796,7 @@ function reAdd(id) {
 let session    = null;  // { exercises: [{name, sets:[{reps,weight}]}] }
 let sessionT0  = null;
 let _timerInt  = null;
+const AUTO_FINISH_MS = 120 * 60 * 1000;
 
 // Persist active session to localStorage so a tab kill doesn't lose the workout
 function saveActiveSession() {
@@ -812,13 +813,13 @@ function restoreActiveSession() {
     if (!raw) return;
     const { session: s, sessionT0: t } = JSON.parse(raw);
     if (!s || !t) return;
-    // Discard if older than 6 hours — stale session
-    if (Date.now() - t > 6 * 60 * 60 * 1000) {
-      localStorage.removeItem('stk_live');
-      return;
-    }
     session   = s;
     sessionT0 = t;
+    // Hit the 2-hour cap while the app was closed — save it rather than lose it
+    if (Date.now() - t > AUTO_FINISH_MS) {
+      autoFinishWorkout();
+      return;
+    }
     _timerInt = setInterval(tickTimer, 1000);
   } catch { localStorage.removeItem('stk_live'); }
 }
@@ -871,9 +872,38 @@ function startWorkout() {
 
 function tickTimer() {
   const sec = Math.floor((Date.now() - sessionT0) / 1000);
+  if (sec * 1000 >= AUTO_FINISH_MS) {
+    const hadExercises = session.exercises.length > 0;
+    autoFinishWorkout();
+    toast(hadExercises ? 'Workout auto-saved after 2 hours' : 'Empty workout ended after 2 hours');
+    if (_screen === 'lift')  renderLift();
+    if (_screen === 'today') renderToday();
+    return;
+  }
   const m   = Math.floor(sec / 60), s = sec % 60;
   const el  = document.getElementById('s-timer');
   if (el) el.textContent = `${m}:${pad(s)}`;
+}
+
+// Save the session without user action (2-hour cap). Duration is capped at
+// the limit since real lifting time is unknown past that point.
+function autoFinishWorkout() {
+  if (session && session.exercises.length) {
+    const d = new Date(sessionT0);
+    const date = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const wkts = getWorkouts();
+    const wkt = {
+      id: uid(), date, ts: sessionT0,
+      dur: Math.min(Math.floor((Date.now()-sessionT0)/1000), AUTO_FINISH_MS/1000),
+      exercises: session.exercises
+    };
+    const idx = wkts.findIndex(w => w.date === date);
+    if (idx >= 0) wkts[idx] = wkt; else wkts.push(wkt);
+    setWorkouts(wkts);
+  }
+  session = null; sessionT0 = null;
+  clearInterval(_timerInt);
+  saveActiveSession();
 }
 
 function cancelWorkout() {
