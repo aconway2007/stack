@@ -417,6 +417,16 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <button class="btn btn-sm btn-secondary" id="notif-btn" onclick="toggleNotif()">Enable</button>
       </div>
       <button class="btn btn-secondary btn-sm" id="notif-test" onclick="sendTestNotif()" style="display:none;width:100%">Send Test Notification</button>
+      <div class="divider"></div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px">Closed-app push: get the 8:30 PM summary even when Stack isn't running. One-time setup — tap Set Up, copy the code, and save it as the <strong style="color:var(--text)">PUSH_SUBSCRIPTION</strong> secret in your GitHub repo (Settings → Secrets and variables → Actions).</p>
+      <div class="setting-row" style="border:none;padding-top:0">
+        <span class="setting-label">Closed-app push</span>
+        <button class="btn btn-sm btn-secondary" onclick="setupClosedPush()">Set Up</button>
+      </div>
+      <div id="push-out" style="display:none">
+        <textarea id="push-json" readonly style="width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:12px;color:var(--muted);font-size:11px;padding:10px;height:84px;font-family:monospace;outline:none;margin-bottom:8px"></textarea>
+        <button class="btn btn-secondary btn-sm" style="width:100%" onclick="copyPushJSON()">Copy Subscription Code</button>
+      </div>
     </div>
 
     <div class="card">
@@ -570,9 +580,9 @@ const $get = (k, d) => { try { const v = localStorage.getItem(k); return v == nu
 const $set = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
 const getSettings  = ()  => $get('stk_cfg', { calGoal: 2500, proGoal: 180 });
-const setSettings  = (v) => $set('stk_cfg', v);
+const setSettings  = (v) => { $set('stk_cfg', v); mirrorSummaryForPush(); };
 const getFoods     = ()  => $get('stk_food', []);
-const setFoods     = (v) => $set('stk_food', v);
+const setFoods     = (v) => { $set('stk_food', v); mirrorSummaryForPush(); };
 const getWorkouts  = ()  => $get('stk_wkt', []);
 const setWorkouts  = (v) => $set('stk_wkt', v);
 const getQFs       = ()  => $get('stk_qf', [
@@ -1307,6 +1317,67 @@ function renderNotifUI() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleDailySummary(); });
 
 // ─────────────────────────────────────────────
+// CLOSED-APP PUSH (Web Push via GitHub Actions)
+// ─────────────────────────────────────────────
+const VAPID_PUBLIC_KEY = 'BKO8_-6mpCTxEfZcUkXNQzK2rBudnRpUAqae5o9_TZTJLJ-Tu8WS1Dedr1Ry-XIXnY8wkXOn29QXNNAyL02Mye8';
+
+function urlB64ToUint8(s) {
+  const pad = '='.repeat((4 - s.length % 4) % 4);
+  const raw = atob((s + pad).replace(/-/g,'+').replace(/_/g,'/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+// Keep today's totals in the SW-readable cache so the push handler can
+// build the summary without access to localStorage
+function mirrorSummaryForPush() {
+  if (!('caches' in window)) return;
+  const cfg = getSettings();
+  const ts = todayStr();
+  const foods = getFoods().filter(f => f.date === ts);
+  const data = {
+    date: ts,
+    cal: foods.reduce((a,f)=>a+(f.cal||0),0),
+    pro: foods.reduce((a,f)=>a+(f.pro||0),0),
+    calGoal: cfg.calGoal, proGoal: cfg.proGoal
+  };
+  caches.open('stack-v2')
+    .then(c => c.put('./__stk-summary', new Response(JSON.stringify(data), { headers:{'Content-Type':'application/json'} })))
+    .catch(()=>{});
+}
+
+async function setupClosedPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !notifSupported()) {
+    toast('On iPhone: use the Home Screen app'); return;
+  }
+  try {
+    if (Notification.permission !== 'granted') {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('Allow notifications first'); return; }
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8(VAPID_PUBLIC_KEY)
+    });
+    document.getElementById('push-json').value = JSON.stringify(sub.toJSON());
+    document.getElementById('push-out').style.display = 'block';
+    mirrorSummaryForPush();
+    toast('Subscribed — copy the code below');
+  } catch (e) {
+    toast('Push setup failed: ' + (e.message || e));
+  }
+}
+
+function copyPushJSON() {
+  const ta = document.getElementById('push-json');
+  ta.select();
+  const val = ta.value;
+  (navigator.clipboard ? navigator.clipboard.writeText(val) : Promise.reject())
+    .then(() => toast('Copied — paste into GitHub secret'))
+    .catch(() => { document.execCommand('copy'); toast('Copied — paste into GitHub secret'); });
+}
+
+// ─────────────────────────────────────────────
 // VOICE / AI NUTRITION
 // ─────────────────────────────────────────────
 const getAPIKey = () => localStorage.getItem('stk_api_key') || '';
@@ -1638,6 +1709,7 @@ function overlayClose(e, id) { if (e.target === e.currentTarget) closeModal(id);
 // ─────────────────────────────────────────────
 restoreActiveSession();
 scheduleDailySummary();
+mirrorSummaryForPush();
 renderToday();
 </script>
 </body>
