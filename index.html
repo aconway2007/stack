@@ -1497,25 +1497,9 @@ function overlayClose(e, id) { if (e.target === e.currentTarget) closeModal(id);
   ml.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
   document.head.appendChild(ml);
 
-  // Service worker (inline blob — works when served over HTTP/HTTPS)
+  // Service worker — network-first so updates always show, cache only as offline fallback
   if ('serviceWorker' in navigator) {
-    const sw = `
-const C='stack-v1';
-self.addEventListener('install',e=>{self.skipWaiting();});
-self.addEventListener('activate',e=>{
-  e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>clients.claim()));
-});
-self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;
-  e.respondWith(caches.open(C).then(c=>c.match(e.request).then(r=>r||fetch(e.request).then(res=>{
-    if(res.ok)c.put(e.request,res.clone());
-    return res;
-  }))));
-});`;
-    navigator.serviceWorker.register(
-      URL.createObjectURL(new Blob([sw],{type:'application/javascript'})),
-      {scope:'./'}
-    ).catch(()=>{});
+    navigator.serviceWorker.register('sw.js', {scope:'./'}).catch(()=>{});
   }
 })();
 
