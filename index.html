@@ -483,7 +483,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       </div>
       <div>
         <label class="form-label">Reps</label>
-        <input type="number" id="ex-reps" value="10" inputmode="numeric">
+        <input type="number" id="ex-reps" value="8" inputmode="numeric">
       </div>
       <div>
         <label class="form-label">Weight (lbs)</label>
@@ -946,7 +946,7 @@ function removeSet(ei,si) {
 }
 function addSet(ei) {
   const sets = session.exercises[ei].sets;
-  const last = sets[sets.length-1] || { reps:10, weight:0 };
+  const last = sets[sets.length-1] || { reps:8, weight:0 };
   sets.push({ reps:last.reps, weight:last.weight });
   saveActiveSession();
   renderExList();
@@ -959,7 +959,7 @@ function updSet(ei,si,field,val) {
 function openAddEx() {
   document.getElementById('ex-name').value   = '';
   document.getElementById('ex-sets').value   = '3';
-  document.getElementById('ex-reps').value   = '10';
+  document.getElementById('ex-reps').value   = '8';
   document.getElementById('ex-weight').value = '';
   document.getElementById('ex-hint').textContent = '';
   openModal('modal-ex');
@@ -968,17 +968,17 @@ function openAddEx() {
 
 document.getElementById('ex-name').addEventListener('input', function() {
   const nm = this.value.trim().toLowerCase();
-  if (!nm) { document.getElementById('ex-hint').textContent = ''; return; }
+  const hint = document.getElementById('ex-hint');
+  if (!nm) { hint.textContent = ''; return; }
   const wkts = getWorkouts();
-  let last = null;
+  let lastEx = null;
   for (let i = wkts.length-1; i >= 0; i--) {
     const ex = wkts[i].exercises.find(e => e.name.toLowerCase() === nm);
-    if (ex && ex.sets.length) { last = Math.max(...ex.sets.map(s=>s.weight||0)); break; }
+    if (ex && ex.sets.length) { lastEx = ex; break; }
   }
-  const hint = document.getElementById('ex-hint');
-  if (last !== null) {
-    hint.textContent = `Last logged: ${last} lbs`;
-    document.getElementById('ex-weight').value = last;
+  if (lastEx) {
+    hint.textContent = 'Last: ' + lastEx.sets.map(s => `${s.weight||0} lbs × ${s.reps||0}`).join(', ');
+    document.getElementById('ex-weight').value = lastEx.sets[0].weight || 0;
   } else {
     hint.textContent = '';
   }
@@ -987,7 +987,7 @@ document.getElementById('ex-name').addEventListener('input', function() {
 function addExToSession() {
   const name   = document.getElementById('ex-name').value.trim();
   const nSets  = parseInt(document.getElementById('ex-sets').value) || 3;
-  const reps   = parseInt(document.getElementById('ex-reps').value) || 10;
+  const reps   = parseInt(document.getElementById('ex-reps').value) || 8;
   const weight = parseFloat(document.getElementById('ex-weight').value) || 0;
   if (!name) { toast('Enter exercise name'); return; }
   const sets = Array.from({length:nSets}, () => ({ reps, weight }));
