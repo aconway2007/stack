@@ -410,6 +410,16 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
 
     <div class="card">
+      <div class="card-title">Daily Summary</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px">A nightly notification at 8:30 PM with your calorie and protein totals. Fires while Stack is open or in the background — or as soon as you return to the app after 8:30.</p>
+      <div class="setting-row" style="border:none;padding-top:0">
+        <span class="setting-label">Notify at 8:30 PM</span>
+        <button class="btn btn-sm btn-secondary" id="notif-btn" onclick="toggleNotif()">Enable</button>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="notif-test" onclick="sendTestNotif()" style="display:none;width:100%">Send Test Notification</button>
+    </div>
+
+    <div class="card">
       <div class="card-title">Quick Foods</div>
       <div id="qf-list"></div>
       <button class="btn btn-secondary" onclick="openAddQF()" style="margin-top:12px">+ Add Quick Food</button>
@@ -1122,6 +1132,7 @@ function renderSettings() {
   document.getElementById('s-pro').value = cfg.proGoal;
   document.getElementById('s-api').value = '';
   renderAPIKeyStatus();
+  renderNotifUI();
   renderQFList();
 }
 
@@ -1205,6 +1216,95 @@ function clearData() {
   toast('Data cleared');
   renderToday();
 }
+
+// ─────────────────────────────────────────────
+// DAILY SUMMARY NOTIFICATION (8:30 PM)
+// ─────────────────────────────────────────────
+const NOTIF_HOUR = 20, NOTIF_MIN = 30;
+let _notifTimer = null;
+
+const notifEnabled = () => $get('stk_notif', false);
+function notifSupported() { return 'Notification' in window; }
+function notifReady() { return notifEnabled() && notifSupported() && Notification.permission === 'granted'; }
+
+function buildDailySummary() {
+  const cfg = getSettings();
+  const ts = todayStr();
+  const foods = getFoods().filter(f => f.date === ts);
+  const cal = foods.reduce((a,f)=>a+(f.cal||0),0);
+  const pro = foods.reduce((a,f)=>a+(f.pro||0),0);
+  const proLeft = cfg.proGoal - pro;
+  let status;
+  if (cal > cfg.calGoal)  status = `${(cal-cfg.calGoal).toLocaleString()} cal over goal`;
+  else if (proLeft <= 0)  status = 'Protein goal hit 💪';
+  else                    status = `${proLeft}g protein to go`;
+  return {
+    title: 'Daily Summary',
+    body: `${cal.toLocaleString()} / ${cfg.calGoal.toLocaleString()} cal · ${pro}g / ${cfg.proGoal}g protein\n${status}`
+  };
+}
+
+async function showDailySummary() {
+  const s = buildDailySummary();
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg && reg.showNotification) { await reg.showNotification(s.title, { body:s.body, tag:'stk-daily' }); return true; }
+  } catch {}
+  try { new Notification(s.title, { body:s.body }); return true; } catch {}
+  return false;
+}
+
+function scheduleDailySummary() {
+  clearTimeout(_notifTimer);
+  if (!notifReady()) return;
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), NOTIF_HOUR, NOTIF_MIN, 0);
+  if (now >= target) {
+    // Already past 8:30 — fire now if we haven't yet today, otherwise aim for tomorrow
+    if ($get('stk_notif_last','') !== todayStr()) { fireDailySummary(); return; }
+    target.setDate(target.getDate() + 1);
+  }
+  _notifTimer = setTimeout(fireDailySummary, target - now);
+}
+
+function fireDailySummary() {
+  $set('stk_notif_last', todayStr());
+  showDailySummary();
+  scheduleDailySummary();
+}
+
+async function toggleNotif() {
+  if (!notifSupported()) { toast('On iPhone: add Stack to your Home Screen first'); return; }
+  if (notifEnabled()) {
+    $set('stk_notif', false);
+    scheduleDailySummary();
+    renderNotifUI();
+    toast('Daily summary off');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') { toast('Notifications blocked — allow in device settings'); return; }
+  $set('stk_notif', true);
+  scheduleDailySummary();
+  renderNotifUI();
+  toast('Daily summary on · 8:30 PM');
+}
+
+function sendTestNotif() {
+  showDailySummary().then(ok => toast(ok ? 'Test notification sent' : 'Could not show notification'));
+}
+
+function renderNotifUI() {
+  const btn = document.getElementById('notif-btn');
+  if (!btn) return;
+  const on = notifReady();
+  btn.textContent = on ? 'Turn Off' : 'Enable';
+  btn.className = 'btn btn-sm ' + (on ? 'btn-danger' : 'btn-secondary');
+  document.getElementById('notif-test').style.display = on ? 'block' : 'none';
+}
+
+// Re-check the schedule whenever the app comes back to the foreground
+document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleDailySummary(); });
 
 // ─────────────────────────────────────────────
 // VOICE / AI NUTRITION
@@ -1537,6 +1637,7 @@ function overlayClose(e, id) { if (e.target === e.currentTarget) closeModal(id);
 // BOOT
 // ─────────────────────────────────────────────
 restoreActiveSession();
+scheduleDailySummary();
 renderToday();
 </script>
 </body>
