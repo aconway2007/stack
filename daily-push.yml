@@ -1,0 +1,39 @@
+name: Daily summary push
+
+on:
+  schedule:
+    - cron: '30 0 * * *'   # 8:30 PM EDT
+    - cron: '30 1 * * *'   # 8:30 PM EST
+  workflow_dispatch:        # manual "send now" button for testing
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      # Two UTC crons cover daylight saving; only the one matching
+      # 8:30 PM in Ohio actually sends
+      - name: Check local time
+        id: tz
+        run: |
+          h=$(TZ=America/New_York date +%H)
+          echo "go=$([ "$h" = "20" ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+
+      - name: Send push
+        if: steps.tz.outputs.go == 'yes' || github.event_name == 'workflow_dispatch'
+        env:
+          SUB: ${{ secrets.PUSH_SUBSCRIPTION }}
+          VAPID_PUBLIC: BKO8_-6mpCTxEfZcUkXNQzK2rBudnRpUAqae5o9_TZTJLJ-Tu8WS1Dedr1Ry-XIXnY8wkXOn29QXNNAyL02Mye8
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SUB" ] || [ -z "$VAPID_PRIVATE" ]; then
+            echo "Missing PUSH_SUBSCRIPTION or VAPID_PRIVATE_KEY secret" >&2
+            exit 1
+          fi
+          npm install --no-save web-push@3
+          node -e '
+            const webpush = require("web-push");
+            webpush.setVapidDetails("mailto:andrewconway2007@gmail.com", process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
+            webpush.sendNotification(JSON.parse(process.env.SUB), "daily")
+              .then(() => console.log("Push sent"))
+              .catch(e => { console.error("Push failed:", e.statusCode || "", e.body || e.message); process.exit(1); });
+          '
