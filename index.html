@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Stack">
+<meta name="apple-mobile-web-app-title" content="Gainline">
 <meta name="theme-color" content="#1a1a1a">
-<title>Stack</title>
+<title>Gainline</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -248,7 +248,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="top-bar">
       <div class="top-bar-inner">
         <div>
-          <div class="app-title">Stack</div>
+          <div class="app-title">Gainline</div>
           <div class="app-sub" id="today-date-label"></div>
         </div>
         <button class="icon-btn" onclick="showScreen('settings')" aria-label="Settings">
@@ -411,14 +411,14 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
     <div class="card">
       <div class="card-title">Daily Summary</div>
-      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px">A nightly notification at 8:30 PM with your calorie and protein totals. Fires while Stack is open or in the background — or as soon as you return to the app after 8:30.</p>
+      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px">A nightly notification at 8:30 PM with your calorie and protein totals. Fires while Gainline is open or in the background — or as soon as you return to the app after 8:30.</p>
       <div class="setting-row" style="border:none;padding-top:0">
         <span class="setting-label">Notify at 8:30 PM</span>
         <button class="btn btn-sm btn-secondary" id="notif-btn" onclick="toggleNotif()">Enable</button>
       </div>
       <button class="btn btn-secondary btn-sm" id="notif-test" onclick="sendTestNotif()" style="display:none;width:100%">Send Test Notification</button>
       <div class="divider"></div>
-      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px">Closed-app push: get the 8:30 PM summary even when Stack isn't running. One-time setup — tap Set Up, copy the code, and save it as the <strong style="color:var(--text)">PUSH_SUBSCRIPTION</strong> secret in your GitHub repo (Settings → Secrets and variables → Actions).</p>
+      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px">Closed-app push: get the 8:30 PM summary even when Gainline isn't running. One-time setup — tap Set Up, copy the code, and save it as the <strong style="color:var(--text)">PUSH_SUBSCRIPTION</strong> secret in your GitHub repo (Settings → Secrets and variables → Actions).</p>
       <div class="setting-row" style="border:none;padding-top:0">
         <span class="setting-label">Closed-app push</span>
         <button class="btn btn-sm btn-secondary" onclick="setupClosedPush()">Set Up</button>
@@ -461,7 +461,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       </div>
     </div>
 
-    <div class="version">Stack v1.0 · All data stored on this device</div>
+    <div class="version">Gainline v1.0 · All data stored on this device</div>
   </div>
 
   <!-- ══════════ NAV ══════════ -->
@@ -1215,13 +1215,13 @@ function exportData() {
   }, null, 2);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([payload], {type:'application/json'}));
-  a.download = `stack-${todayStr()}.json`;
+  a.download = `gainline-${todayStr()}.json`;
   a.click();
   toast('Exported!');
 }
 
 function clearData() {
-  if (!confirm('Delete ALL Stack data? This cannot be undone.')) return;
+  if (!confirm('Delete ALL Gainline data? This cannot be undone.')) return;
   ['stk_food','stk_wkt'].forEach(k => localStorage.removeItem(k));
   toast('Data cleared');
   renderToday();
@@ -1284,7 +1284,7 @@ function fireDailySummary() {
 }
 
 async function toggleNotif() {
-  if (!notifSupported()) { toast('On iPhone: add Stack to your Home Screen first'); return; }
+  if (!notifSupported()) { toast('On iPhone: add Gainline to your Home Screen first'); return; }
   if (notifEnabled()) {
     $set('stk_notif', false);
     scheduleDailySummary();
@@ -1509,7 +1509,7 @@ async function handleCameraPhoto(event) {
           'Authorization': `Bearer ${key}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'https://aconway2007.github.io/stack/',
-          'X-Title': 'Stack Nutrition Tracker',
+          'X-Title': 'Gainline',
         },
         body: JSON.stringify({
           model: 'anthropic/claude-haiku-4-5',
@@ -1579,7 +1579,7 @@ async function parseNutrition(transcript) {
           'Authorization': `Bearer ${key}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'https://aconway2007.github.io/stack/',
-          'X-Title': 'Stack Nutrition Tracker',
+          'X-Title': 'Gainline',
         },
         body: JSON.stringify({
           model: 'anthropic/claude-haiku-4-5',
@@ -1687,7 +1687,7 @@ function overlayClose(e, id) { if (e.target === e.currentTarget) closeModal(id);
 
   // Manifest
   const manifest = {
-    name:'Stack', short_name:'Stack',
+    name:'Gainline', short_name:'Gainline',
     description:'Nutrition & Lifting Tracker',
     start_url:'.', display:'standalone',
     background_color:'#1a1a1a', theme_color:'#1a1a1a',

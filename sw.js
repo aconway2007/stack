@@ -26,7 +26,7 @@ self.addEventListener('fetch', e => {
 // mirrors buildDailySummary() in index.html.
 self.addEventListener('push', e => {
   e.waitUntil((async () => {
-    let body = 'Open Stack to see today\'s macros';
+    let body = 'Open Gainline to see today\'s macros';
     try {
       const res = await caches.match('./__stk-summary');
       if (res) {
